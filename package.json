@@ -1,0 +1,17 @@
+{
+  "name": "aurora-music",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A YouTube Music style streaming web app with mood-based playback, search and a full player.",
+  "type": "module",
+  "workspaces": ["client", "server"],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm run test -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
