@@ -19,8 +19,7 @@ npm install
 npm run dev
 ```
 
-- Web app: http://localhost:5173 (Vite dev server, proxies `/api` to the API)
-- API: http://localhost:3001/api/health
+- Web app: https://aurora-the-music.onrender.com/
 
 ### Production
 
