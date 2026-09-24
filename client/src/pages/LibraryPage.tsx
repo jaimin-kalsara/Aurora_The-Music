@@ -32,7 +32,7 @@ export function LibraryPage() {
     <div className="page">
       <div className="page-title">
         <h1>Your Library</h1>
-        <p className="muted" style={{ fontSize: 17 }}>Everything you’ve loved and everything you’ve played, kept on this device.</p>
+        <p className="lead">Everything you’ve loved and everything you’ve played, kept on this device.</p>
       </div>
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'liked'} className={`chip ${tab === 'liked' ? 'on' : ''}`} onClick={() => setParams({ tab: 'liked' })}>

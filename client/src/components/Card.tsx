@@ -1,5 +1,5 @@
+import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import type { Entity } from '../types';
 import { Img } from './Img';
 import { Play, Pause } from './Icons';
@@ -26,27 +26,29 @@ export function entityPath(item: Entity): string | null {
 
 function subtitleOf(item: Entity): string {
   if (item.type === 'song') return item.artistNames || item.subtitle;
-  if (item.type === 'artist') return 'Artist';
-  if (item.type === 'album') return [item.year || null, item.subtitle].filter(Boolean).join(' · ');
+  if (item.type === 'artist') return item.subtitle && item.subtitle !== 'Artist' ? item.subtitle : 'Artist';
+  if (item.type === 'album') return [item.kind === 'single' ? 'Single' : null, item.year || null, item.subtitle].filter(Boolean).join(' · ');
   if (item.type === 'playlist') return item.songCount ? `${item.songCount} songs` : item.subtitle;
   return '';
 }
 
-export function Card({ item, size = 'md' }: Props) {
+/** Artwork card. Songs play on tap; albums, playlists and artists open their page. */
+export const Card = memo(function Card({ item, size = 'md' }: Props) {
   const navigate = useNavigate();
   const { playEntity, busyId } = usePlayEntity();
-  const context = usePlayer((s) => s.context);
+  const isCurrent = usePlayer((s) =>
+    item.type === 'song' ? s.queue[s.index]?.id === item.id : Boolean(s.context && s.context.type === item.type && s.context.id === item.id),
+  );
   const playing = usePlayer((s) => s.playing);
-  const currentId = usePlayer((s) => s.queue[s.index]?.id);
   const toggle = usePlayer((s) => s.toggle);
 
-  const isCurrent =
-    item.type === 'song' ? currentId === item.id : Boolean(context && context.type === item.type && context.id === item.id);
-  const path = entityPath(item);
+  const path = item.type === 'song' ? null : entityPath(item);
 
   const onOpen = () => {
-    if (path) navigate(path);
-    else void playEntity(item);
+    if (item.type === 'song') {
+      if (isCurrent) toggle();
+      else void playEntity(item);
+    } else if (path) navigate(path);
   };
   const onPlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -55,16 +57,14 @@ export function Card({ item, size = 'md' }: Props) {
   };
 
   return (
-    <motion.div
-      className={`card ${item.type === 'artist' ? 'card--round' : ''} ${size === 'sm' ? 'sm' : ''}`}
+    <div
+      className={`card ${item.type === 'artist' ? 'card--round' : ''} ${size === 'sm' ? 'sm' : ''} ${isCurrent ? 'current' : ''}`}
       role="button"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onOpen();
       }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
     >
       <div className="card-art">
         <Img src={item.image} alt={item.title} />
@@ -74,7 +74,7 @@ export function Card({ item, size = 'md' }: Props) {
           aria-label={isCurrent && playing ? `Pause ${item.title}` : `Play ${item.title}`}
           disabled={busyId === item.id}
         >
-          {isCurrent && playing ? <Pause size={20} /> : <Play size={20} />}
+          {busyId === item.id ? <span className="spinner light" aria-hidden /> : isCurrent && playing ? <Pause size={20} /> : <Play size={20} />}
         </button>
       </div>
       <div className="card-body">
@@ -83,6 +83,6 @@ export function Card({ item, size = 'md' }: Props) {
         </div>
         <div className="card-sub truncate">{subtitleOf(item)}</div>
       </div>
-    </motion.div>
+    </div>
   );
-}
+});

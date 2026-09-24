@@ -28,6 +28,7 @@ export interface Song {
   explicit: boolean;
   hasLyrics: boolean;
   label: string;
+  isVideo?: boolean;
   url: string;
   streams: Streams | null;
 }
@@ -42,6 +43,7 @@ export interface Album {
   year: number;
   language: string;
   songCount: number;
+  kind?: 'album' | 'single' | 'ep';
   url: string;
   songs: Song[];
 }
@@ -69,6 +71,7 @@ export interface ArtistCard {
 }
 
 export interface ArtistDetail extends ArtistCard {
+  banner?: string;
   followers: number;
   fans: number;
   verified: boolean;
@@ -76,7 +79,8 @@ export interface ArtistDetail extends ArtistCard {
   bio: string;
   topSongs: Song[];
   topAlbums: Album[];
-  singles: Song[];
+  singles: Album[];
+  videos: Song[];
   latestRelease: (Song | Album)[];
   similarArtists: ArtistCard[];
   playlists: Playlist[];
@@ -96,7 +100,7 @@ export interface Mood {
   title: string;
   tagline: string;
   emoji: string;
-  channelId: string | null;
+  categories: string[];
   queries: string[];
   gradient: [string, string];
 }
@@ -104,10 +108,12 @@ export interface Mood {
 export interface SearchBucket<T> {
   total: number;
   results: T[];
+  lastPage?: boolean;
 }
 
 export interface SearchResults {
   query: string;
+  top: Entity | null;
   songs: SearchBucket<Song>;
   albums: SearchBucket<Album>;
   artists: SearchBucket<ArtistCard>;
@@ -116,10 +122,24 @@ export interface SearchResults {
 
 export interface Suggestions {
   top: Entity | null;
+  terms: string[];
   songs: Song[];
   albums: Album[];
   artists: ArtistCard[];
   playlists: Playlist[];
+}
+
+export interface LyricLine {
+  time: number;
+  text: string;
+}
+
+export interface LyricsData {
+  id: string;
+  source: 'lrclib' | 'ytmusic';
+  synced: LyricLine[] | null;
+  lines: string[];
+  copyright: string;
 }
 
 export type Quality = 'high' | 'medium' | 'low';

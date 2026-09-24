@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Song } from '../types';
 import { usePlayer, type PlayContext } from '../store/player';
 import { useLibrary } from '../store/library';
 import { formatTime } from '../utils/format';
 import { Img } from './Img';
-import { Heart, Pause, Play, Plus, Queue as QueueIcon } from './Icons';
+import { ActionSheet } from './ActionSheet';
+import { ChevronRight, Heart, Library, More, Play, Plus, Queue as QueueIcon } from './Icons';
 import { toast } from '../store/toast';
 
 interface Props {
@@ -28,6 +30,7 @@ export function Equalizer({ paused = false }: { paused?: boolean }) {
 }
 
 export function SongList({ songs, context, showAlbum = true, showArt = true, showHeader = true, numbered = true }: Props) {
+  const navigate = useNavigate();
   const play = usePlayer((s) => s.play);
   const toggle = usePlayer((s) => s.toggle);
   const playing = usePlayer((s) => s.playing);
@@ -36,6 +39,7 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
   const playNext = usePlayer((s) => s.playNext);
   const liked = useLibrary((s) => s.liked);
   const toggleLike = useLibrary((s) => s.toggleLike);
+  const [menuFor, setMenuFor] = useState<Song | null>(null);
 
   const onRow = (song: Song, i: number) => {
     if (!song.streams) {
@@ -46,8 +50,14 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
     else play(songs, i, context);
   };
 
+  const like = (song: Song) => {
+    const was = Boolean(liked[song.id]);
+    toggleLike(song);
+    toast(was ? 'Removed from Liked Songs' : 'Added to Liked Songs');
+  };
+
   return (
-    <div className={`song-list ${showAlbum ? '' : 'compact'}`}>
+    <div className={`song-list ${showAlbum ? '' : 'compact'} ${showArt ? '' : 'no-art'}`}>
       {showHeader && (
         <div className="song-head">
           <span style={{ textAlign: 'center' }}>#</span>
@@ -77,15 +87,13 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
           >
             <div className="song-idx">
               {showArt ? <Img src={song.image} alt="" /> : <span className="num">{numbered ? i + 1 : ''}</span>}
-              <span className="hover-play">
-                {active && playing ? <Equalizer /> : active ? <Play size={18} /> : <Play size={18} />}
-              </span>
-              {!showArt && active && playing && <span className="hover-play" style={{ opacity: 1, background: 'none' }}><Equalizer /></span>}
+              <span className="hover-play">{active && playing ? <Equalizer /> : <Play size={18} />}</span>
             </div>
             <div className="song-main">
-              <div className="song-title truncate">
+              <div className="song-title">
                 <span className="truncate">{song.title}</span>
                 {song.explicit && <span className="badge-e">E</span>}
+                {song.isVideo && <span className="badge-e">VIDEO</span>}
               </div>
               <div className="song-artists truncate">
                 {song.artists.length
@@ -115,25 +123,21 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
                 )}
               </div>
             )}
-            <div className="song-dur">
-              {song.streams?.highBitrate === 320 && <span className="dim" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em' }}>HQ</span>}
-              {formatTime(song.duration)}
-            </div>
+            <div className="song-dur">{song.duration ? formatTime(song.duration) : ''}</div>
             <div className={`song-actions ${isLiked ? 'always' : ''}`}>
               <button
-                className={`icon-btn sm ${isLiked ? 'on' : ''}`}
+                className={`icon-btn sm hide-sm ${isLiked ? 'on' : ''}`}
                 aria-label={isLiked ? 'Remove from liked songs' : 'Add to liked songs'}
+                aria-pressed={isLiked}
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleLike(song);
-                  toast(isLiked ? 'Removed from Liked Songs' : 'Added to Liked Songs');
+                  like(song);
                 }}
-                style={isLiked ? { color: '#fff' } : undefined}
               >
                 <Heart size={17} filled={isLiked} />
               </button>
               <button
-                className="icon-btn sm"
+                className="icon-btn sm hide-sm"
                 aria-label="Play next"
                 title="Play next"
                 onClick={(e) => {
@@ -145,7 +149,7 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
                 <Plus size={17} />
               </button>
               <button
-                className="icon-btn sm"
+                className="icon-btn sm hide-sm"
                 aria-label="Add to queue"
                 title="Add to queue"
                 onClick={(e) => {
@@ -156,12 +160,45 @@ export function SongList({ songs, context, showAlbum = true, showArt = true, sho
               >
                 <QueueIcon size={17} />
               </button>
+              <button
+                className="icon-btn sm show-sm"
+                aria-label="More"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuFor(song);
+                }}
+              >
+                <More size={18} />
+              </button>
             </div>
             {active && <span className="sr-only">{playing ? 'Now playing' : 'Paused'}</span>}
-            {active && !playing && <span style={{ display: 'none' }}><Pause /></span>}
           </div>
         );
       })}
+
+      <ActionSheet
+        open={Boolean(menuFor)}
+        onClose={() => setMenuFor(null)}
+        title={menuFor?.title}
+        subtitle={menuFor?.artistNames || menuFor?.subtitle}
+        image={menuFor?.image}
+        actions={
+          menuFor
+            ? [
+                { label: 'Play now', icon: <Play size={18} />, onSelect: () => play(songs, songs.indexOf(menuFor), context) },
+                { label: 'Play next', icon: <Plus size={18} />, onSelect: () => (playNext(menuFor), toast('Playing next')) },
+                { label: 'Add to queue', icon: <QueueIcon size={18} />, onSelect: () => (enqueue(menuFor), toast('Added to queue')) },
+                {
+                  label: liked[menuFor.id] ? 'Remove from Liked Songs' : 'Add to Liked Songs',
+                  icon: <Heart size={18} filled={Boolean(liked[menuFor.id])} />,
+                  onSelect: () => like(menuFor),
+                },
+                ...(menuFor.artists[0]?.id ? [{ label: `Go to ${menuFor.artists[0].name}`, icon: <ChevronRight size={18} />, onSelect: () => navigate(`/artist/${menuFor.artists[0].id}`) }] : []),
+                ...(menuFor.album.id ? [{ label: 'Go to album', icon: <Library size={18} />, onSelect: () => navigate(`/album/${menuFor.album.id}`) }] : []),
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

@@ -54,10 +54,10 @@ export function MoodPage() {
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
           <div>
-            <div className="hero-kind" style={{ color: 'rgba(255,255,255,0.8)' }}>Mood</div>
+            <div className="hero-kind">Mood</div>
             <h1>{mood.title}</h1>
             <p>{mood.tagline}</p>
-            <div className="hero-stats" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 10 }}>
+            <div className="hero-stats" style={{ marginTop: 10 }}>
               {songs.length} songs{total ? ` · ${formatDurationLong(total)}` : ''}
             </div>
             <div className="hero-actions">
@@ -85,7 +85,7 @@ export function MoodPage() {
             <div className="shelf-head">
               <div>
                 <h2>Made for this mood</h2>
-                <div className="sub">Curated from editorial picks and community playlists</div>
+                <div className="sub">Curated from YouTube Music mood playlists</div>
               </div>
             </div>
             <SongList songs={songs} context={context} />

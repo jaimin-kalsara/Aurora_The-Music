@@ -11,7 +11,7 @@ import { toast } from '../store/toast';
 
 export function PlaylistPage() {
   const { id = '' } = useParams();
-  const { data, loading, error, refetch } = useQuery(`playlist:${id}`, () => api.playlist(id, 1, 100));
+  const { data, loading, error, refetch } = useQuery(`playlist:${id}`, () => api.playlist(id, 200));
   const play = usePlayer((s) => s.play);
   const toggle = usePlayer((s) => s.toggle);
   const enqueue = usePlayer((s) => s.enqueue);

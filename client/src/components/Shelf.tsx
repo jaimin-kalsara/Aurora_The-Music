@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, type ReactNode } from 'react';
+import { useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Entity } from '../types';
 import { Card } from './Card';
@@ -13,26 +13,34 @@ interface Props {
   children?: ReactNode;
 }
 
-/** Horizontal, snap-scrolling row of cards with arrow controls. */
+/** Horizontal, snap-scrolling row of cards with arrow controls (arrows hidden on touch). */
 export function Shelf({ title, subtitle, items, seeAllTo, size = 'md', children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(true);
+  const frame = useRef(0);
 
-  const update = () => {
-    const el = ref.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 4);
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  };
+  const update = useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => {
+      const el = ref.current;
+      if (!el) return;
+      setCanLeft(el.scrollLeft > 4);
+      setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    });
+  }, []);
+
   useEffect(() => {
     update();
     const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [items?.length]);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(frame.current);
+    };
+  }, [items?.length, update]);
 
   const scrollBy = (dir: 1 | -1) => {
     const el = ref.current;
@@ -45,8 +53,8 @@ export function Shelf({ title, subtitle, items, seeAllTo, size = 'md', children 
   return (
     <section className="shelf">
       <div className="shelf-head">
-        <div>
-          <h2>{seeAllTo ? <Link to={seeAllTo}>{title}</Link> : title}</h2>
+        <div style={{ minWidth: 0 }}>
+          <h2 className="truncate">{seeAllTo ? <Link to={seeAllTo}>{title}</Link> : title}</h2>
           {subtitle && <div className="sub">{subtitle}</div>}
         </div>
         <div className="shelf-controls">
@@ -55,10 +63,10 @@ export function Shelf({ title, subtitle, items, seeAllTo, size = 'md', children 
               See all
             </Link>
           )}
-          <button className="icon-btn" onClick={() => scrollBy(-1)} disabled={!canLeft} aria-label="Scroll left">
+          <button className="icon-btn glass-btn hide-touch" onClick={() => scrollBy(-1)} disabled={!canLeft} aria-label="Scroll left">
             <ChevronLeft />
           </button>
-          <button className="icon-btn" onClick={() => scrollBy(1)} disabled={!canRight} aria-label="Scroll right">
+          <button className="icon-btn glass-btn hide-touch" onClick={() => scrollBy(1)} disabled={!canRight} aria-label="Scroll right">
             <ChevronRight />
           </button>
         </div>

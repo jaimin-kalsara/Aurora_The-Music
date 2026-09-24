@@ -27,26 +27,33 @@ function TopResult({ item }: { item: Entity }) {
   const navigate = useNavigate();
   const { playEntity } = usePlayEntity();
   const path = entityPath(item);
-  const sub = item.type === 'song' ? item.artistNames : item.type === 'artist' ? 'Artist' : item.type === 'album' ? `Album · ${item.subtitle}` : 'Playlist';
+  const sub = item.type === 'song' ? `Song · ${item.artistNames}` : item.type === 'artist' ? `Artist · ${item.subtitle}` : item.type === 'album' ? `Album · ${item.subtitle}` : `Playlist · ${item.subtitle}`;
   return (
     <motion.div
-      className="card"
-      style={{ width: '100%', maxWidth: 520, display: 'flex', gap: 20, alignItems: 'center', padding: 18, margin: 0, background: 'var(--surface)', border: '1px solid var(--border)' }}
+      className="top-result"
       role="button"
       tabIndex={0}
-      onClick={() => (path ? navigate(path) : playEntity(item))}
-      whileHover={{ scale: 1.005 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      onClick={() => (path && item.type !== 'song' ? navigate(path) : playEntity(item))}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className={`card-art ${item.type === 'artist' ? 'round' : ''}`} style={{ width: 120, flex: 'none', borderRadius: item.type === 'artist' ? '50%' : 12 }}>
+      <div className={`top-result-art ${item.type === 'artist' ? 'round' : ''}`}>
         <Img src={item.image} alt="" />
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div className="hero-kind">Top result</div>
-        <h2 className="truncate" style={{ fontSize: 26, marginTop: 4 }}>{item.title}</h2>
+        <h2 className="truncate">{item.title}</h2>
         <div className="muted truncate">{sub}</div>
       </div>
-      <button className="card-play visible" style={{ position: 'static', transform: 'none', width: 52, height: 52 }} onClick={(e) => { e.stopPropagation(); void playEntity(item); }} aria-label={`Play ${item.title}`}>
+      <button
+        className="play-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          void playEntity(item);
+        }}
+        aria-label={`Play ${item.title}`}
+      >
         <Play size={22} />
       </button>
     </motion.div>
@@ -75,7 +82,7 @@ function FilteredResults({ q, tab }: { q: string; tab: Exclude<Tab, 'all'> }) {
       ) : (
         <div className="grid">{items.map((item) => <Card key={`${item.type}-${item.id}`} item={item} />)}</div>
       )}
-      {items.length < total && (
+      {data && !data.lastPage && items.length < total && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
           <button className="btn btn-ghost" onClick={() => setPage((p) => p + 1)} disabled={loading}>
             {loading ? 'Loading…' : 'Load more'}
@@ -97,6 +104,7 @@ export function SearchPage() {
 
   const top = useMemo<Entity | null>(() => {
     if (!data) return null;
+    if (data.top) return data.top;
     const lower = q.toLowerCase();
     const exactArtist = data.artists.results.find((a) => a.title.toLowerCase() === lower);
     if (exactArtist) return exactArtist;
@@ -117,7 +125,7 @@ export function SearchPage() {
       <div className="page">
         <div className="page-title">
           <h1>Search</h1>
-          <p className="muted" style={{ fontSize: 17 }}>Find any song, artist, album or playlist. Press ⌘K / Ctrl+K to jump to the search box.</p>
+          <p className="lead">Every song on YouTube Music. Search any track, artist, album or playlist.</p>
         </div>
         {recentSearches.length > 0 && (
           <section className="shelf">
@@ -143,7 +151,7 @@ export function SearchPage() {
   return (
     <div className="page">
       <div className="page-title">
-        <h1 style={{ fontSize: 32 }}>Results for “{q}”</h1>
+        <h1 className="search-title">Results for “{q}”</h1>
       </div>
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
@@ -171,8 +179,8 @@ export function SearchPage() {
                 <h2 style={{ marginBottom: 6 }}>Songs</h2>
                 <SongList songs={data.songs.results.slice(0, 6)} context={{ type: 'search', title: `Results for “${q}”` }} showAlbum={false} showHeader={false} />
                 {data.songs.total > 6 && (
-                  <button className="chip" onClick={() => setTab('songs')} style={{ marginLeft: 14 }}>
-                    See all {data.songs.total.toLocaleString()} songs
+                  <button className="chip" onClick={() => setTab('songs')} style={{ marginTop: 6 }}>
+                    See all songs
                   </button>
                 )}
               </div>

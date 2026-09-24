@@ -36,7 +36,7 @@ export function MoodGrid({ limit }: { limit?: number }) {
 export function Explore() {
   const languages = useLibrary((s) => s.settings.languages);
   const charts = useQuery(`charts:${languages}`, () => api.charts());
-  const fresh = useQuery(`new:${languages}`, () => api.newReleases(1, 30));
+  const fresh = useQuery('new-releases', () => api.newReleases(1, 40));
   const trending = useQuery(`trending:${languages}`, () => api.trending('song'));
   const { hash } = useLocation();
 
@@ -46,13 +46,13 @@ export function Explore() {
     if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
   }, [hash, charts.data, fresh.data]);
 
-  const trendingSongs = (trending.data?.items.filter((i) => i.type === 'song') ?? []) as Song[];
+  const trendingSongs = (trending.data?.items.filter((i) => i.type === 'song') ?? []).slice(0, 30) as Song[];
 
   return (
     <div className="page">
       <div className="page-title">
         <h1>Explore</h1>
-        <p className="muted" style={{ fontSize: 17 }}>Moods, charts and everything that dropped this week.</p>
+        <p className="lead">Moods, charts and everything that dropped this week.</p>
       </div>
 
       <section className="shelf">
@@ -67,8 +67,9 @@ export function Explore() {
       </section>
 
       <div id="charts">
-        {charts.data ? <Shelf title="Top charts" subtitle="Updated daily" items={charts.data.items} /> : <ShelfSkeleton />}
+        {charts.data ? <Shelf title="Top charts" subtitle="YouTube Music charts, updated daily" items={charts.data.items} /> : <ShelfSkeleton />}
       </div>
+      {fresh.data && fresh.data.videos.length > 0 && <Shelf title="New music videos" items={fresh.data.videos} />}
 
       <section className="shelf" id="new">
         <div className="shelf-head">

@@ -5,9 +5,27 @@ import { api } from '../api';
 import { toast } from '../store/toast';
 import type { Quality, Song } from '../types';
 
+/** Opus (WebM) is the best quality YouTube Music offers; Safari only plays the AAC (m4a) ladder. */
+const supportsOpus = (() => {
+  try {
+    return typeof Audio !== 'undefined' && new Audio().canPlayType('audio/webm; codecs="opus"') !== '';
+  } catch {
+    return false;
+  }
+})();
+export const STREAM_FORMAT: 'webm' | 'm4a' = supportsOpus ? 'webm' : 'm4a';
+
 export function pickStream(song: Song, quality: Quality): string | null {
   if (!song.streams) return null;
-  return quality === 'high' ? song.streams.high : quality === 'medium' ? song.streams.medium : song.streams.low;
+  const base = quality === 'high' ? song.streams.high : quality === 'medium' ? song.streams.medium : song.streams.low;
+  return `${base}${base.includes('?') ? '&' : '?'}fmt=${STREAM_FORMAT}`;
+}
+
+/** Human label for the active stream tier. */
+export function qualityLabel(quality: Quality): string {
+  if (quality === 'high') return supportsOpus ? 'Opus · 160 kbps' : 'AAC · 128 kbps';
+  if (quality === 'medium') return supportsOpus ? 'Opus · 70 kbps' : 'AAC · 128 kbps';
+  return supportsOpus ? 'Opus · 50 kbps' : 'AAC · 48 kbps';
 }
 
 /**
@@ -21,6 +39,8 @@ export function AudioEngine() {
   const lastSongId = useRef<string | null>(null);
   const resumeAt = useRef<number | null>(null);
   const failures = useRef(0);
+  const playedSeconds = useRef(0);
+  const switching = useRef(false);
 
   const song = useCurrentSong();
   const playing = usePlayer((s) => s.playing);
@@ -36,6 +56,7 @@ export function AudioEngine() {
   useEffect(() => {
     const a = new Audio();
     a.preload = 'auto';
+    a.crossOrigin = 'anonymous';
     audioRef.current = a;
     const p = new Audio();
     p.preload = 'auto';
@@ -47,9 +68,15 @@ export function AudioEngine() {
     }
 
     const store = usePlayer.getState;
+    let lastTick = 0;
     const onTime = () => {
+      // Throttle store updates to ~4/s; the UI interpolates between them.
+      const now = performance.now();
+      if (now - lastTick < 240 && !a.paused) return;
+      lastTick = now;
       const current = store().queue[store().index];
       store().setProgress(a.currentTime, a.duration || current?.duration || 0);
+      playedSeconds.current = a.currentTime;
     };
     const onWaiting = () => store().setBuffering(true);
     const onReady = () => store().setBuffering(false);
@@ -67,10 +94,12 @@ export function AudioEngine() {
         resumeAt.current = null;
       }
       failures.current = 0;
+      const current = store().queue[store().index];
+      store().setProgress(a.currentTime, a.duration || current?.duration || 0);
     };
     const onError = () => {
       const current = store().queue[store().index];
-      if (!current) return;
+      if (!current || !a.src) return;
       failures.current += 1;
       store().setBuffering(false);
       if (failures.current > 3) {
@@ -82,6 +111,21 @@ export function AudioEngine() {
       toast(`Couldn't play “${current.title}”, skipping`, 'error');
       setTimeout(() => store().next(), 400);
     };
+    // Keep the store honest when the OS pauses/resumes us (audio focus loss, headphones unplugged).
+    // Pauses fired by loading a new source or by reaching the end are ignored.
+    const onPause = () => {
+      if (a.ended || switching.current) return;
+      if (store().playing) store().setPlaying(false);
+    };
+    const onPlay = () => {
+      if (!store().playing) store().setPlaying(true);
+    };
+    const onPlaying = () => {
+      switching.current = false;
+    };
+    a.addEventListener('pause', onPause);
+    a.addEventListener('play', onPlay);
+    a.addEventListener('playing', onPlaying);
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('durationchange', onTime);
     a.addEventListener('waiting', onWaiting);
@@ -103,6 +147,8 @@ export function AudioEngine() {
         ms.setActionHandler('seekto', (d) => {
           if (typeof d.seekTime === 'number') store().seek(d.seekTime);
         });
+        ms.setActionHandler('seekbackward', (d) => store().seek(Math.max(0, a.currentTime - (d.seekOffset || 10))));
+        ms.setActionHandler('seekforward', (d) => store().seek(Math.min(a.duration || 0, a.currentTime + (d.seekOffset || 10))));
       } catch {
         /* unsupported */
       }
@@ -116,7 +162,6 @@ export function AudioEngine() {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const active = document.activeElement;
       const role = active?.getAttribute('role');
-      // Let focused controls handle their own activation keys (Space on a button, arrows on a slider).
       const focusedControl = Boolean(active && (active.tagName === 'BUTTON' || active.tagName === 'A' || role === 'button' || role === 'slider'));
       if (e.key === ' ' || e.code === 'Space') {
         if (focusedControl) return;
@@ -129,16 +174,21 @@ export function AudioEngine() {
       } else if (e.key === 'ArrowLeft' && e.shiftKey) {
         store().prev();
       } else if (e.key === 'ArrowRight') {
-        store().seek(Math.min((a.duration || 0), a.currentTime + 5));
+        store().seek(Math.min(a.duration || 0, a.currentTime + 5));
       } else if (e.key === 'ArrowLeft') {
         store().seek(Math.max(0, a.currentTime - 5));
       } else if (e.key.toLowerCase() === 'm') {
         const lib = useLibrary.getState();
         lib.updateSettings({ volume: lib.settings.volume > 0 ? 0 : 0.8 });
+      } else if (e.key.toLowerCase() === 'l') {
+        const s = store();
+        if (s.queue.length) {
+          s.setNowPlayingOpen(true);
+          s.setLyricsOpen(!s.lyricsOpen);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
-    // After a mouse click on a button, drop focus so Space keeps controlling playback.
     const onPointerUp = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse') return;
       const el = document.activeElement as HTMLElement | null;
@@ -171,23 +221,38 @@ export function AudioEngine() {
       return;
     }
     const sameSong = lastSongId.current === song.id;
-    if (sameSong && a.currentSrc && a.currentSrc !== url) {
+    const absolute = new URL(url, window.location.origin).toString();
+    if (sameSong && a.currentSrc && a.currentSrc !== absolute) {
       resumeAt.current = a.currentTime; // quality switch mid-track
     }
-    if (!sameSong || a.currentSrc !== url) {
+    if (!sameSong || a.currentSrc !== absolute) {
+      switching.current = true;
       a.src = url;
       a.load();
     }
     if (!sameSong) {
+      // A skip is a track that was left before 30% or 30 seconds.
+      const previous = lastSongId.current;
+      if (previous && playedSeconds.current < 30) void api.recordSkip(previous).catch(() => undefined);
+      playedSeconds.current = 0;
       lastSongId.current = song.id;
       useLibrary.getState().addRecent(song);
+      const ctx = usePlayer.getState().context;
+      void api
+        .recordPlay(song.id, {
+          language: song.language || undefined,
+          artistIds: song.artists.map((x) => x.id).filter(Boolean),
+          mood: ctx?.type === 'mood' ? ctx.id : undefined,
+          context: ctx?.type,
+        })
+        .catch(() => undefined);
       document.title = `${song.title} · ${song.artistNames || song.subtitle} — Aurora`;
       if ('mediaSession' in navigator) {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: song.title,
           artist: song.artistNames || song.subtitle,
           album: song.album.name,
-          artwork: [{ src: song.image, sizes: '500x500', type: 'image/jpeg' }],
+          artwork: [{ src: song.image, sizes: '544x544', type: 'image/jpeg' }],
         });
       }
     }
@@ -243,7 +308,7 @@ export function AudioEngine() {
       if (done) return;
       if (s.duration && s.currentTime / s.duration > 0.5) {
         done = true;
-        if (p.src !== url) {
+        if (!p.src.endsWith(url)) {
           p.src = url;
           p.load();
         }

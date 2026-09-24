@@ -5,14 +5,22 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import routes from './routes.js';
+import stream from './stream.js';
+import { getClient } from './ytmusic.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
 const app = express();
 
 app.disable('x-powered-by');
+app.set('trust proxy', true);
 app.use(cors());
+
+// Audio is relayed byte-for-byte: mount it before compression so nothing re-encodes the body.
+app.use('/api', stream);
+
 app.use(compression());
+app.use(express.json({ limit: '64kb' }));
 app.use('/api', (_req, res, next) => {
   res.set('Cache-Control', 'public, max-age=60');
   next();
@@ -39,4 +47,8 @@ if (fs.existsSync(dist)) {
 
 app.listen(PORT, () => {
   console.log(`[api] listening on http://localhost:${PORT}${fs.existsSync(dist) ? ' (serving client/dist)' : ''}`);
+  // Warm the InnerTube session (player script, visitor data) so the first request is fast.
+  getClient()
+    .then(() => console.log('[api] YouTube Music session ready'))
+    .catch((err) => console.error(`[api] YouTube Music session failed: ${err.message}`));
 });

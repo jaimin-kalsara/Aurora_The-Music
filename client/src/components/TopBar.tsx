@@ -9,18 +9,19 @@ import { entityPath } from './Card';
 import { usePlayEntity } from '../hooks/usePlayEntity';
 import { useLibrary } from '../store/library';
 
-type Row = { item: Entity; group: string };
+type Row = { kind: 'term'; term: string } | { kind: 'entity'; item: Entity; group: string };
 
 function flatten(s: Suggestions): Row[] {
   const rows: Row[] = [];
-  if (s.top) rows.push({ item: s.top, group: 'Top result' });
-  s.songs.forEach((i) => rows.push({ item: i, group: 'Songs' }));
-  s.artists.forEach((i) => rows.push({ item: i, group: 'Artists' }));
-  s.albums.forEach((i) => rows.push({ item: i, group: 'Albums' }));
-  s.playlists.forEach((i) => rows.push({ item: i, group: 'Playlists' }));
+  s.terms.slice(0, 4).forEach((term) => rows.push({ kind: 'term', term }));
+  if (s.top) rows.push({ kind: 'entity', item: s.top, group: 'Top result' });
+  s.songs.forEach((i) => rows.push({ kind: 'entity', item: i, group: 'Songs' }));
+  s.artists.forEach((i) => rows.push({ kind: 'entity', item: i, group: 'Artists' }));
+  s.albums.forEach((i) => rows.push({ kind: 'entity', item: i, group: 'Albums' }));
+  s.playlists.forEach((i) => rows.push({ kind: 'entity', item: i, group: 'Playlists' }));
   const seen = new Set<string>();
   return rows.filter((r) => {
-    const k = `${r.item.type}:${r.item.id}`;
+    const k = r.kind === 'term' ? `t:${r.term.toLowerCase()}` : `${r.item.type}:${r.item.id}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -60,7 +61,7 @@ export function TopBar() {
           setActive(-1);
         })
         .catch(() => undefined);
-    }, 180);
+    }, 160);
     return () => {
       clearTimeout(t);
       controller.abort();
@@ -68,11 +69,11 @@ export function TopBar() {
   }, [value]);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: PointerEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
   }, []);
 
   useEffect(() => {
@@ -92,11 +93,18 @@ export function TopBar() {
     if (!query) return;
     addRecentSearch(query);
     setOpen(false);
+    inputRef.current?.blur();
     navigate(`/search?q=${encodeURIComponent(query)}`);
   };
 
   const choose = (row: Row) => {
+    if (row.kind === 'term') {
+      setValue(row.term);
+      submit(row.term);
+      return;
+    }
     setOpen(false);
+    inputRef.current?.blur();
     addRecentSearch(row.item.title);
     const path = entityPath(row.item);
     if (row.item.type === 'song') {
@@ -107,20 +115,21 @@ export function TopBar() {
   };
 
   let lastGroup = '';
+  const showSuggest = open && rows.length > 0 && value.trim().length >= 2;
 
   return (
     <header className="topbar">
       <div className="topbar-nav">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="icon-btn glass-btn" onClick={() => navigate(-1)} aria-label="Back">
           <ChevronLeft />
         </button>
-        <button className="icon-btn" onClick={() => navigate(1)} aria-label="Forward">
+        <button className="icon-btn glass-btn" onClick={() => navigate(1)} aria-label="Forward">
           <ChevronRight />
         </button>
       </div>
-      <div className="search" ref={wrapRef}>
+      <div className={`search ${open ? 'focused' : ''}`} ref={wrapRef}>
         <form
-          className="search-box"
+          className="search-box glass"
           role="search"
           onSubmit={(e) => {
             e.preventDefault();
@@ -135,6 +144,10 @@ export function TopBar() {
             placeholder="Search songs, artists, albums, playlists"
             aria-label="Search"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            enterKeyHint="search"
             onChange={(e) => {
               setValue(e.target.value);
               setOpen(true);
@@ -147,10 +160,6 @@ export function TopBar() {
               } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 setActive((a) => Math.max(-1, a - 1));
-              } else if (e.key === 'Enter') {
-                e.preventDefault();
-                if (active >= 0 && rows[active]) choose(rows[active]);
-                else submit();
               } else if (e.key === 'Escape') {
                 setOpen(false);
                 inputRef.current?.blur();
@@ -171,24 +180,49 @@ export function TopBar() {
               <Close size={16} />
             </button>
           )}
-          <span className="dim" style={{ fontSize: 11, border: '1px solid var(--border-strong)', padding: '1px 6px', borderRadius: 5 }}>
+          <span className="kbd hide-sm" aria-hidden>
             ⌘K
           </span>
         </form>
         <AnimatePresence>
-          {open && rows.length > 0 && value.trim().length >= 2 && (
+          {showSuggest && (
             <motion.div
-              className="suggest"
+              className="suggest glass"
               initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
               role="listbox"
             >
-              {rows.slice(0, 10).map((row, i) => {
+              {rows.slice(0, 12).map((row, i) => {
+                if (row.kind === 'term') {
+                  return (
+                    <button
+                      key={`term-${row.term}`}
+                      type="button"
+                      className={`suggest-item term ${i === active ? 'active' : ''}`}
+                      onMouseEnter={() => setActive(i)}
+                      onClick={() => choose(row)}
+                      role="option"
+                      aria-selected={i === active}
+                    >
+                      <span className="suggest-ico">
+                        <SearchIcon size={16} />
+                      </span>
+                      <span className="truncate">{row.term}</span>
+                    </button>
+                  );
+                }
                 const header = row.group !== lastGroup ? row.group : null;
                 lastGroup = row.group;
-                const kind = row.item.type === 'song' ? (row.item.artistNames || row.item.subtitle) : row.item.type === 'artist' ? 'Artist' : row.item.type === 'album' ? `Album · ${row.item.subtitle}` : 'Playlist';
+                const kind =
+                  row.item.type === 'song'
+                    ? row.item.artistNames || row.item.subtitle
+                    : row.item.type === 'artist'
+                      ? 'Artist'
+                      : row.item.type === 'album'
+                        ? `Album · ${row.item.subtitle}`
+                        : 'Playlist';
                 return (
                   <div key={`${row.item.type}-${row.item.id}`}>
                     {header && <div className="suggest-group">{header}</div>}
@@ -207,26 +241,22 @@ export function TopBar() {
                         </div>
                         <div className="kind truncate">{kind}</div>
                       </div>
-                      <span className="dim" style={{ fontSize: 12, textTransform: 'capitalize' }}>
-                        {row.item.type}
-                      </span>
+                      <span className="dim suggest-type">{row.item.type}</span>
                     </button>
                   </div>
                 );
               })}
-              <button type="button" className="suggest-item" onClick={() => submit()} style={{ gridTemplateColumns: '40px 1fr' }}>
-                <span style={{ display: 'grid', placeItems: 'center', color: 'var(--text-3)' }}>
-                  <SearchIcon size={18} />
+              <button type="button" className="suggest-item term" onClick={() => submit()}>
+                <span className="suggest-ico">
+                  <SearchIcon size={16} />
                 </span>
-                <span className="truncate">
-                  See all results for “{value.trim()}”
-                </span>
+                <span className="truncate">See all results for “{value.trim()}”</span>
               </button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-      <div style={{ width: 84 }} className="topbar-nav" />
+      <div className="topbar-nav topbar-spacer" aria-hidden />
     </header>
   );
 }

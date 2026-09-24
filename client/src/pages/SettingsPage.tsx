@@ -5,9 +5,9 @@ import { toast } from '../store/toast';
 import type { Quality } from '../types';
 
 const QUALITIES: { key: Quality; label: string; hint: string }[] = [
-  { key: 'high', label: 'Ultra · 320 kbps', hint: 'Highest fidelity AAC available for every track' },
-  { key: 'medium', label: 'High · 160 kbps', hint: 'Balanced quality and data' },
-  { key: 'low', label: 'Data saver · 96 kbps', hint: 'Lightest on bandwidth' },
+  { key: 'high', label: 'High', hint: 'Opus ~160 kbps, the best YouTube Music streams (AAC 128 kbps on Safari)' },
+  { key: 'medium', label: 'Normal', hint: 'Opus ~70 kbps, balanced quality and data' },
+  { key: 'low', label: 'Data saver', hint: 'Opus ~50 kbps, lightest on mobile data' },
 ];
 
 export function SettingsPage() {
@@ -27,7 +27,7 @@ export function SettingsPage() {
     <div className="page">
       <div className="page-title">
         <h1>Settings</h1>
-        <p className="muted" style={{ fontSize: 17 }}>Tune playback and what shows up on your home feed.</p>
+        <p className="lead">Tune playback and what shows up on your home feed.</p>
       </div>
 
       <div className="settings-card">
@@ -56,7 +56,7 @@ export function SettingsPage() {
         <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
           <div>
             <div className="label">Music languages</div>
-            <div className="hint">Shapes trending, charts and new releases on Home and Explore. Search always covers everything.</div>
+            <div className="hint">Shapes the language picks on Home and Explore. Search always covers the whole YouTube Music catalog.</div>
           </div>
           <div className="chips" style={{ marginTop: 8 }}>
             {LANGUAGE_OPTIONS.map((lang) => (
@@ -71,7 +71,7 @@ export function SettingsPage() {
           <div>
             <div className="label">Keyboard shortcuts</div>
             <div className="hint">
-              Space play/pause · ←/→ seek 5s · Shift+←/→ previous/next · M mute · ⌘K / Ctrl+K search
+              Space play/pause · ←/→ seek 5s · Shift+←/→ previous/next · L lyrics · M mute · ⌘K / Ctrl+K search
             </div>
           </div>
         </div>

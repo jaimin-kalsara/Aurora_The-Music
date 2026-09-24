@@ -55,18 +55,19 @@ export function ArtistPage() {
         kind={data.verified ? 'Verified artist' : 'Artist'}
         title={data.title}
         image={data.image}
+        banner={data.banner}
         round
         subtitle={
           data.verified ? (
             <span className="row" style={{ gap: 6 }}>
-              <span style={{ display: 'inline-grid', placeItems: 'center', width: 18, height: 18, borderRadius: '50%', background: '#fff', color: '#000' }}>
+              <span className="verified-dot">
                 <Check size={12} />
               </span>
               Verified
             </span>
           ) : undefined
         }
-        stats={[data.followers ? `${formatCount(data.followers)} followers` : null, data.fans ? `${formatCount(data.fans)} monthly fans` : null].filter(Boolean).join(' · ')}
+        stats={[data.followers ? `${formatCount(data.followers)} subscribers` : null, `${data.topAlbums.length + data.singles.length} releases`].filter(Boolean).join(' · ')}
         actions={
           <>
             <button className="btn btn-primary" onClick={() => (isCurrent ? toggle() : start(false))} disabled={!songs.length}>
@@ -86,7 +87,7 @@ export function ArtistPage() {
         </div>
         <SongList songs={shown} context={context} showHeader={false} />
         {data.topSongs.length > 5 && (
-          <button className="chip" style={{ marginLeft: 14, marginTop: 6 }} onClick={() => setShowAll((v) => !v)}>
+          <button className="chip" style={{ marginTop: 8 }} onClick={() => setShowAll((v) => !v)}>
             {showAll ? 'Show less' : `Show all ${data.topSongs.length}`}
           </button>
         )}
@@ -94,7 +95,8 @@ export function ArtistPage() {
 
       {data.latestRelease.length > 0 && <Shelf title="Latest release" items={data.latestRelease} />}
       <Shelf title="Albums" items={data.topAlbums} />
-      <Shelf title="Singles" items={data.singles} />
+      <Shelf title="Singles & EPs" items={data.singles} />
+      <Shelf title="Videos" items={data.videos} />
       <Shelf title="Playlists" items={data.playlists} />
       <Shelf title="Fans also like" items={data.similarArtists} size="sm" />
 
@@ -103,7 +105,7 @@ export function ArtistPage() {
           <div className="shelf-head">
             <h2>About</h2>
           </div>
-          <p className="muted" style={{ maxWidth: 760, whiteSpace: 'pre-line', display: bioOpen ? 'block' : '-webkit-box', WebkitLineClamp: bioOpen ? 'unset' : 4, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.6 }}>
+          <p className={`bio ${bioOpen ? 'open' : ''}`}>
             {data.bio}
           </p>
           <button className="chip" style={{ marginTop: 10 }} onClick={() => setBioOpen((v) => !v)}>

@@ -1,89 +1,181 @@
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decode, bigImage, normalizeSong, normalizePlaylist, normalizeAny } from '../src/normalize.js';
-import { decryptMediaUrl, buildStreams } from '../src/saavn.js';
-import { findMood, MOODS } from '../src/moods.js';
+import {
+  bigImage,
+  parseCount,
+  buildStreams,
+  normalizeSong,
+  normalizeAlbum,
+  normalizePlaylist,
+  normalizeArtistCard,
+  normalizeAny,
+  normalizeSection,
+  normalizeAlbumPage,
+} from '../src/normalize.js';
 
-// Real encrypted url captured from the catalog; decrypts to a 96kbps CDN path.
-const ENCRYPTED = 'ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDySan+n+AW12BvOaQj7cuGfg8Ed085rYUtqDj8DQY3nIMQdr42ScGdtRw7tS9a8Gtq';
+const text = (s) => ({ toString: () => s, text: s });
 
-test('decode unescapes html entities', () => {
-  assert.equal(decode('Gehra Hua (From &quot;Dhurandhar&quot;) &amp; more'), 'Gehra Hua (From "Dhurandhar") & more');
-  assert.equal(decode(undefined), '');
+test('bigImage upgrades googleusercontent thumbnails and forces https', () => {
+  assert.equal(bigImage('http://lh3.googleusercontent.com/abc=w120-h120-l90-rj'), 'https://lh3.googleusercontent.com/abc=w544-h544-l90-rj');
+  assert.equal(bigImage('https://yt3.googleusercontent.com/abc=s576'), 'https://yt3.googleusercontent.com/abc=s544');
+  assert.equal(bigImage('https://i.ytimg.com/vi/abc/hqdefault.jpg'), 'https://i.ytimg.com/vi/abc/hqdefault.jpg');
+  assert.equal(bigImage(''), '');
 });
 
-test('bigImage upgrades thumbnails to 500x500 and forces https', () => {
-  assert.equal(bigImage('http://c.saavncdn.com/x/y-150x150.jpg'), 'https://c.saavncdn.com/x/y-500x500.jpg');
-  assert.equal(bigImage('https://c.saavncdn.com/editorial/Chill.jpg'), 'https://c.saavncdn.com/editorial/Chill.jpg');
+test('parseCount handles K/M/B suffixes', () => {
+  assert.equal(parseCount('1.4M views'), 1_400_000);
+  assert.equal(parseCount('674M monthly audience'), 674_000_000);
+  assert.equal(parseCount('2.8K'), 2_800);
+  assert.equal(parseCount('nothing'), 0);
 });
 
-test('decryptMediaUrl produces a CDN url', () => {
-  const url = decryptMediaUrl(ENCRYPTED);
-  assert.equal(url, 'https://aac.saavncdn.com/450/f467e05e2825cec2203546333e0d0550_96.mp4');
-  assert.equal(decryptMediaUrl(''), null);
-  assert.equal(decryptMediaUrl('not-base64!!'), null);
+test('buildStreams points at the proxy for every quality', () => {
+  const s = buildStreams('NJAv_7lHUIU');
+  assert.equal(s.high, '/api/stream/NJAv_7lHUIU?q=high');
+  assert.equal(s.low, '/api/stream/NJAv_7lHUIU?q=low');
+  assert.equal(s.highBitrate, 160);
+  assert.equal(buildStreams(''), null);
 });
 
-test('buildStreams exposes the quality ladder and respects the 320 flag', () => {
-  const s = buildStreams('https://aac.saavncdn.com/450/abc_96.mp4', true);
-  assert.equal(s.low, 'https://aac.saavncdn.com/450/abc_96.mp4');
-  assert.equal(s.medium, 'https://aac.saavncdn.com/450/abc_160.mp4');
-  assert.equal(s.high, 'https://aac.saavncdn.com/450/abc_320.mp4');
-  assert.equal(s.highBitrate, 320);
-  const capped = buildStreams('https://aac.saavncdn.com/450/abc_96.mp4', false);
-  assert.equal(capped.high, 'https://aac.saavncdn.com/450/abc_160.mp4');
-  assert.equal(capped.highBitrate, 160);
-});
-
-test('normalizeSong flattens the upstream shape', () => {
+test('normalizeSong maps a MusicResponsiveListItem song', () => {
   const song = normalizeSong({
-    id: 'YiVML4Zo',
-    title: 'Gehra Hua (From &quot;Dhurandhar&quot;)',
-    subtitle: 'Shashwat Sachdev, Arijit Singh - Gehra Hua',
-    type: 'song',
-    image: 'https://c.saavncdn.com/450/x-150x150.jpg',
-    year: '2025',
-    play_count: '57472615',
-    explicit_content: '0',
-    more_info: {
-      album_id: '70160165',
-      album: 'Gehra Hua (From &quot;Dhurandhar&quot;)',
-      duration: '362',
-      has_lyrics: 'true',
-      '320kbps': 'true',
-      encrypted_media_url: ENCRYPTED,
-      artistMap: { primary_artists: [{ id: '459320', name: 'Arijit Singh', image: '', role: 'primary_artists' }] },
-    },
+    type: 'MusicResponsiveListItem',
+    item_type: 'song',
+    id: 'NJAv_7lHUIU',
+    title: 'Kesariya (From "Brahmastra")',
+    artists: [{ name: 'Arijit Singh', channel_id: 'UCDxKh1gFWeYsqePvgVzmPoQ' }],
+    album: { id: 'MPREb_o3adW3fGQYh', name: 'Kesariya', year: '2022' },
+    duration: { text: '4:29', seconds: 269 },
+    thumbnail: { contents: [{ url: 'https://yt3.googleusercontent.com/x=w120-h120-l90-rj', width: 120 }, { url: 'https://yt3.googleusercontent.com/x=w60-h60-l90-rj', width: 60 }] },
+    badges: [{ icon_type: 'MUSIC_EXPLICIT_BADGE' }],
   });
-  assert.equal(song.title, 'Gehra Hua (From "Dhurandhar")');
-  assert.equal(song.duration, 362);
-  assert.equal(song.year, 2025);
-  assert.equal(song.hasLyrics, true);
-  assert.equal(song.artists[0].name, 'Arijit Singh');
+  assert.equal(song.id, 'NJAv_7lHUIU');
+  assert.equal(song.type, 'song');
+  assert.equal(song.title, 'Kesariya (From "Brahmastra")');
   assert.equal(song.artistNames, 'Arijit Singh');
-  assert.equal(song.image, 'https://c.saavncdn.com/450/x-500x500.jpg');
-  assert.equal(song.streams.highBitrate, 320);
+  assert.equal(song.artists[0].id, 'UCDxKh1gFWeYsqePvgVzmPoQ');
+  assert.equal(song.album.id, 'MPREb_o3adW3fGQYh');
+  assert.equal(song.duration, 269);
+  assert.equal(song.year, 2022);
+  assert.equal(song.explicit, true);
+  assert.equal(song.image, 'https://yt3.googleusercontent.com/x=w544-h544-l90-rj');
+  assert.equal(song.streams.high, '/api/stream/NJAv_7lHUIU?q=high');
 });
 
-test('normalizeSong falls back to subtitle artists and null streams for mini objects', () => {
-  const song = normalizeSong({ id: 'a', title: 'Tum Ho', subtitle: 'A.R. Rahman, Mohit Chauhan - Rockstar', type: 'song', image: '' });
-  assert.deepEqual(song.artists.map((a) => a.name), ['A.R. Rahman', 'Mohit Chauhan']);
-  assert.equal(song.streams, null);
+test('normalizeSong maps a PlaylistPanelVideo and MusicTwoRowItem video', () => {
+  const panel = normalizeSong({
+    type: 'PlaylistPanelVideo',
+    video_id: 'YALvuUpY_b0',
+    title: text('Apna Bana Le'),
+    author: 'Arijit Singh & Sachin-Jigar',
+    artists: [{ name: 'Arijit Singh', channel_id: 'UC1' }, { name: 'Sachin-Jigar', channel_id: 'UC2' }],
+    duration: { seconds: 200 },
+    thumbnail: [{ url: 'https://i.ytimg.com/vi/YALvuUpY_b0/hqdefault.jpg', width: 480 }],
+  });
+  assert.equal(panel.id, 'YALvuUpY_b0');
+  assert.equal(panel.artistNames, 'Arijit Singh, Sachin-Jigar');
+
+  const video = normalizeSong({
+    type: 'MusicTwoRowItem',
+    item_type: 'video',
+    id: 'vrOCv5SOTrU',
+    title: text('Jaadugari (AMAN)'),
+    subtitle: text('YRF • 1.4M views'),
+    thumbnail: [{ url: 'https://i.ytimg.com/vi/vrOCv5SOTrU/hq720.jpg', width: 720 }],
+  });
+  assert.equal(video.artistNames, 'YRF');
+  assert.equal(video.playCount, 1_400_000);
+  assert.equal(video.isVideo, true);
 });
 
-test('normalizePlaylist and normalizeAny handle mixed entities', () => {
-  const pl = normalizePlaylist({ id: '1', title: 'Taaza Tunes', list_count: '50', more_info: { follower_count: '675338', firstname: 'JioSaavn' }, list: '' });
-  assert.equal(pl.songCount, 50);
-  assert.equal(pl.followers, 675338);
-  assert.equal(pl.subtitle, 'JioSaavn');
-  assert.equal(normalizeAny({ type: 'show', id: 'x' }), null);
-  const artist = normalizeAny({ type: 'radio_station', id: '459320', title: 'Arijit Singh', image: '', more_info: { featured_station_type: 'artist' } });
-  assert.equal(artist.type, 'artist');
-  assert.equal(artist.id, '459320');
+test('normalizeSong rejects non-track nodes', () => {
+  assert.equal(normalizeSong({ item_type: 'album', id: 'MPREb_x' }), null);
+  assert.equal(normalizeSong({ item_type: 'song', id: 'short', title: 'x' }), null);
+  assert.equal(normalizeSong(null), null);
 });
 
-test('moods resolve by key and all carry a fallback query', () => {
-  assert.equal(findMood('HAPPY').title, 'Happy');
-  assert.equal(findMood('nope'), null);
-  for (const m of MOODS) assert.ok(m.queries.length > 0, `${m.key} has queries`);
+test('normalizeAlbum reads MusicTwoRowItem albums', () => {
+  const album = normalizeAlbum({
+    type: 'MusicTwoRowItem',
+    item_type: 'album',
+    id: 'MPREb_VMAptX4LMgN',
+    title: text('Shor Barpa Hai Jahan Mein'),
+    subtitle: text('Album • Owais Raza Qadri'),
+    year: '2026',
+    thumbnail: [{ url: 'https://yt3.googleusercontent.com/a=w226-h226-l90-rj', width: 226 }],
+  });
+  assert.equal(album.type, 'album');
+  assert.equal(album.artists[0].name, 'Owais Raza Qadri');
+  assert.equal(album.year, 2026);
+  assert.equal(album.image, 'https://yt3.googleusercontent.com/a=w544-h544-l90-rj');
+  assert.equal(normalizeAlbum({ id: 'notanalbum', title: 'x' }), null);
+});
+
+test('normalizeAlbumPage attaches album artists and art to songs', () => {
+  const album = normalizeAlbumPage(
+    {
+      header: {
+        title: text('Kesariya'),
+        subtitle: text('Single • 2022'),
+        second_subtitle: text('1 song • 4 minutes'),
+        strapline_text_one: text('Arijit Singh'),
+        thumbnail: { contents: [{ url: 'https://yt3.googleusercontent.com/k=w544-h544-l90-rj', width: 544 }] },
+      },
+      contents: [{ item_type: 'song', id: 'BddP6PYo2gs', title: 'Kesariya', duration: { seconds: 269 } }],
+    },
+    'MPREb_o3adW3fGQYh',
+  );
+  assert.equal(album.kind, 'single');
+  assert.equal(album.year, 2022);
+  assert.equal(album.songs.length, 1);
+  assert.equal(album.songs[0].artistNames, 'Arijit Singh');
+  assert.equal(album.songs[0].album.id, 'MPREb_o3adW3fGQYh');
+  assert.equal(album.songs[0].image, album.image);
+});
+
+test('normalizePlaylist strips the VL prefix and keeps the author', () => {
+  const pl = normalizePlaylist({
+    type: 'MusicTwoRowItem',
+    item_type: 'playlist',
+    id: 'VLRDCLAK5uy_lSaqe',
+    title: text('Spotlight: Arijit Singh'),
+    subtitle: text('Playlist • YouTube Music'),
+    thumbnail: [{ url: 'https://yt3.googleusercontent.com/p=w544-h544-l90-rj', width: 544 }],
+  });
+  assert.equal(pl.id, 'RDCLAK5uy_lSaqe');
+  assert.equal(pl.subtitle, 'YouTube Music');
+  assert.equal(pl.url, 'https://music.youtube.com/playlist?list=RDCLAK5uy_lSaqe');
+});
+
+test('normalizeArtistCard reads search and carousel artists', () => {
+  const a = normalizeArtistCard({ item_type: 'artist', id: 'UCDxKh1gFWeYsqePvgVzmPoQ', name: 'Arijit Singh', subtitle: text('Artist • 674M monthly audience') });
+  assert.equal(a.type, 'artist');
+  assert.equal(a.title, 'Arijit Singh');
+  assert.equal(a.subtitle, '674M monthly audience');
+  assert.equal(normalizeArtistCard({ id: 'MPREb', name: 'x' }), null);
+});
+
+test('normalizeAny infers the entity type from ids when item_type is missing', () => {
+  assert.equal(normalizeAny({ id: 'MPREb_x1', title: text('A') }).type, 'album');
+  assert.equal(normalizeAny({ id: 'UCabc', title: text('A') }).type, 'artist');
+  assert.equal(normalizeAny({ id: 'VLPLabc', title: text('A') }).type, 'playlist');
+  assert.equal(normalizeAny({ id: 'NJAv_7lHUIU', title: text('A') }).type, 'song');
+  assert.equal(normalizeAny({ item_type: 'podcast_show', id: 'MPSPabc', title: 'x' }), null);
+});
+
+test('normalizeSection builds a home section with a stable id and kind', () => {
+  const section = normalizeSection(
+    {
+      header: { title: text('Quick picks') },
+      contents: [
+        { item_type: 'song', id: 'NJAv_7lHUIU', title: 'A', duration: { seconds: 1 } },
+        { item_type: 'song', id: 'YALvuUpY_b0', title: 'B', duration: { seconds: 1 } },
+      ],
+    },
+    'feed-',
+  );
+  assert.equal(section.id, 'feed-quick-picks');
+  assert.equal(section.kind, 'song');
+  assert.equal(section.items.length, 2);
+  assert.equal(normalizeSection({ header: { title: text('Empty') }, contents: [] }), null);
 });
